@@ -67,7 +67,7 @@ def make_api_request(method, endpoint, params=None, payload=None):
 def create_project(customer_name):
     payload = {
         "subscriptionId": "SBPnwD_kw-0hN_O5bhUwKTVQ2",
-        "projectName": f"test-NEXTGEN CyberLAB - {customer_name}",
+        "projectName": f"NEXTGEN CyberLAB - {customer_name}",
         "teamNames": [customer_name],
         "projectType": 0
     }
