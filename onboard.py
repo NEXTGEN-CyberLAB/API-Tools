@@ -5,38 +5,33 @@ import string
 import hashlib
 import json
 import urllib.parse
+import csv
+import os
+import re
 
 # API credentials and base URL
 API_ID = "<your-API-ID-here>"
 API_KEY = "<your-API-Key-here>"
 BASE_URL = "https://use.cloudshare.com/api/v3"
 
-def generate_auth_header(method, url, params=None):
-    # Generates an authentication header for API requests
-    # This uses a custom authentication scheme required by the CloudShare API
+error_log = []
 
-    # Generate a timestamp and a random token
+def generate_auth_header(method, url, params=None):
     timestamp = str(int(time.time()))
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
     
-    # Construct the full URL including query parameters for GET requests
     if method == 'GET' and params:
         query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
         full_url = f"{url}?{query_string}"
     else:
         full_url = url
     
-    # Create the message to be hashed
     message = f"{API_KEY}{full_url}{timestamp}{token}"
-    # Generate HMAC using SHA1
     hmac = hashlib.sha1(message.encode()).hexdigest()
-    # Construct the final authentication parameter
     auth_param = f"userapiid:{API_ID};timestamp:{timestamp};token:{token};hmac:{hmac}"
     return f"cs_sha1 {auth_param}"
 
 def make_api_request(method, endpoint, params=None, payload=None):
-    # Makes an API request to the CloudShare API
-    # Handles both GET and POST requests
     url = f"{BASE_URL}{endpoint}"
     headers = {
         "Accept": "application/json",
@@ -44,31 +39,32 @@ def make_api_request(method, endpoint, params=None, payload=None):
         "Authorization": generate_auth_header(method, url, params)
     }
     
-    # Commented out print statements for debugging
-    # print(f"Request URL: {url}")
-    # print(f"Request Headers: {headers}")
-    # if payload:
-    #     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-    # if params:
-    #     print(f"Request Params: {params}")
+    debug_info = {
+        "Request URL": url,
+        "Request Headers": headers,
+        "Request Payload": payload,
+        "Request Params": params
+    }
     
     try:
-        # Make the API request
         if method == 'GET':
             response = requests.get(url, headers=headers, params=params, verify=True)
         else:
             response = requests.post(url, headers=headers, json=payload, verify=True)
         
-        # Commented out print statements for debugging
-        # print(f"Status Code: {response.status_code}")
-        # print(f"Response Body: {response.text}")
+        debug_info["Status Code"] = response.status_code
+        debug_info["Response Body"] = response.text
+        
+        if response.status_code not in [200, 201, 204]:
+            error_log.append(debug_info)
+        
         return response
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred: {e}")
+        debug_info["Error"] = str(e)
+        error_log.append(debug_info)
         return None
 
 def create_project(customer_name):
-    # Creates a new project in CloudShare
     payload = {
         "subscriptionId": "SBPnwD_kw-0hN_O5bhUwKTVQ2",
         "projectName": f"test-NEXTGEN CyberLAB - {customer_name}",
@@ -87,7 +83,6 @@ def create_project(customer_name):
     return None
 
 def get_team_id(project_id):
-    # Retrieves the team ID associated with a project
     params = {
         "getRows": "true",
         "projectId": project_id,
@@ -105,14 +100,13 @@ def get_team_id(project_id):
     return None
 
 def invite_user(email, first_name, last_name, project_id, team_id):
-    # Invites a user to the project as a Project Manager
     payload = {
         "email": email,
         "firstName": first_name,
         "lastName": last_name,
         "projectId": project_id,
         "teamId": team_id,
-        "userLevel": 8,  # 8 corresponds to Project Manager role
+        "userLevel": 8,
         "suppressEmails": False
     }
     
@@ -121,11 +115,20 @@ def invite_user(email, first_name, last_name, project_id, team_id):
     if response and response.status_code == 200:
         return response.json()
     else:
-        print(f"Invitation failed: {response.json().get('message', 'Unknown error') if response else 'No response'}")
+        print(f"Invitation failed for {email}: {response.json().get('message', 'Unknown error') if response else 'No response'}")
         return None
 
+def invite_users(project_id, team_id, users):
+    results = []
+    for user in users:
+        result = invite_user(user['email'], user['first_name'], user['last_name'], project_id, team_id)
+        if result:
+            results.append(result)
+        else:
+            print(f"Failed to invite user: {user['email']}")
+    return results
+
 def get_policy_id(project_id):
-    # Retrieves the policy ID associated with a project
     response = make_api_request("GET", f"/projects/{project_id}/policies")
     
     if response and response.status_code == 200:
@@ -137,7 +140,6 @@ def get_policy_id(project_id):
     return None
 
 def create_environment(customer_name, project_id, team_id, policy_id):
-    # Creates a new environment in the project with specified virtual machines
     payload = {
         "environment": {
             "name": f"{customer_name} example environment",
@@ -191,66 +193,120 @@ def create_environment(customer_name, project_id, team_id, policy_id):
         print(f"Environment creation failed: {response.json().get('message', 'Unknown error') if response else 'No response'}")
         return None
 
-def main():
-    # Main function that orchestrates the entire onboarding process
-    print("Starting onboarding process...")
-    
-    # Collect user input
-    customer_name = input("Enter customer name: ")
-    first_name = input("Enter user's first name: ")
-    last_name = input("Enter user's last name: ")
-    email = input("Enter user's email address: ")
+def is_valid_email(email):
+    # Updated regex pattern to allow '+' in the local part of the email
+    pattern = r'^[\w\.-]+(\+[\w\.-]+)?@[\w\.-]+\.\w+$'
+    return re.match(pattern, email) is not None
 
-    # Step 1: Create project
-    print("\nCreating project...")
+def load_users_from_csv():
+    file_path = 'users.csv'
+    if not os.path.exists(file_path):
+        print("users.csv not found in the current directory.")
+        return None
+
+    try:
+        with open(file_path, 'r', encoding='utf-8-sig') as csvfile:
+            reader = csv.reader(csvfile)
+            users = []
+            for row in reader:
+                if len(row) != 3 or not is_valid_email(row[0]):
+                    print(f"Skipping invalid row: {row}")
+                    continue
+                users.append({
+                    'email': row[0],
+                    'first_name': row[1],
+                    'last_name': row[2]
+                })
+        print(f"Successfully loaded {len(users)} users from the CSV file.")
+        return users
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        return None
+
+def get_users_input():
+    users = []
+    while True:
+        email = input("Enter user's email address: ")
+        if not is_valid_email(email):
+            print("Invalid email address. Please try again.")
+            continue
+        first_name = input("Enter user's first name: ")
+        last_name = input("Enter user's last name: ")
+        users.append({
+            'email': email,
+            'first_name': first_name,
+            'last_name': last_name
+        })
+        if input("Would you like to add another user? (y/n): ").lower() != 'y':
+            break
+    print(f"Successfully added {len(users)} users manually.")
+    return users
+
+def main():
+    print("Starting the onboarding process...")
+    
+    customer_name = input("Enter the customer name: ")
+
+    users = load_users_from_csv()
+    if users:
+        use_csv = input("users.csv file found. Would you like to use the users detailed in this file? (y/n): ").lower() == 'y'
+        if not use_csv:
+            users = None
+
+    while users is None:
+        users = get_users_input()
+        if not users:
+            retry = input("No users were added. Would you like to try again? (y/n): ").lower()
+            if retry != 'y':
+                print("Aborting the onboarding process.")
+                return
+
+    print("\nCreating the project...")
     project_data = create_project(customer_name)
     if not project_data or 'id' not in project_data:
-        print("Failed to create project. Aborting onboarding process.")
+        print("Failed to create the project. Aborting the onboarding process.")
         return
 
     project_id = project_data['id']
     print(f"Project created successfully. Project ID: {project_id}")
 
-    # Step 2: Get team ID
-    print("\nFetching team ID...")
+    print("\nFetching the team ID...")
     team_id = get_team_id(project_id)
     if not team_id:
-        print("Failed to fetch team ID. Aborting onboarding process.")
+        print("Failed to fetch the team ID. Aborting the onboarding process.")
         return
 
     print(f"Team ID fetched successfully. Team ID: {team_id}")
 
-    # Step 3: Get policy ID
-    print("\nFetching policy ID...")
+    print("\nFetching the policy ID...")
     policy_id = get_policy_id(project_id)
     if not policy_id:
-        print("Failed to fetch policy ID. Aborting onboarding process.")
+        print("Failed to fetch the policy ID. Aborting the onboarding process.")
         return
 
     print(f"Policy ID fetched successfully. Policy ID: {policy_id}")
 
-    # Step 4: Invite user
-    print("\nInviting user...")
-    invitation_data = invite_user(email, first_name, last_name, project_id, team_id)
+    print("\nInviting users...")
+    invitation_data = invite_users(project_id, team_id, users)
     if invitation_data:
-        print("User invited successfully as Project Manager.")
-        # Commented out detailed invitation data
-        # print(f"Invitation details: {json.dumps(invitation_data, indent=2)}")
+        print(f"Successfully invited {len(invitation_data)} out of {len(users)} users as Project Managers.")
     else:
-        print("Failed to invite user. Onboarding process incomplete.")
+        print("Failed to invite any users. The onboarding process is incomplete.")
         return
 
-    # Step 5: Create environment
-    print("\nCreating environment...")
+    print("\nCreating the environment...")
     environment_data = create_environment(customer_name, project_id, team_id, policy_id)
     if environment_data:
         print("Environment created successfully.")
-        # Commented out detailed environment data
-        # print(f"Environment details: {json.dumps(environment_data, indent=2)}")
     else:
-        print("Failed to create environment. Onboarding process incomplete.")
+        print("Failed to create the environment. The onboarding process is incomplete.")
 
-    print("\nOnboarding process completed successfully!")
+    if error_log:
+        print("\nERROR LOG:")
+        print("Errors occurred during the onboarding process. Please send the following error log to hayden.loader@nextgen.group:")
+        print(json.dumps(error_log, indent=2))
+    else:
+        print("\nThe onboarding process has completed successfully!")
 
 if __name__ == "__main__":
     main()
