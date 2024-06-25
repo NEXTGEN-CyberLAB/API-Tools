@@ -12,10 +12,9 @@ API_KEY = "<your-API-Key-here>"
 BASE_URL = "https://use.cloudshare.com/api/v3"
 
 def generate_auth_header(method, url, params=None):
-    """
-    Generates an authentication header for API requests.
-    This uses a custom authentication scheme required by the CloudShare API.
-    """
+    # Generates an authentication header for API requests
+    # This uses a custom authentication scheme required by the CloudShare API
+
     # Generate a timestamp and a random token
     timestamp = str(int(time.time()))
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
@@ -36,10 +35,8 @@ def generate_auth_header(method, url, params=None):
     return f"cs_sha1 {auth_param}"
 
 def make_api_request(method, endpoint, params=None, payload=None):
-    """
-    Makes an API request to the CloudShare API.
-    Handles both GET and POST requests.
-    """
+    # Makes an API request to the CloudShare API
+    # Handles both GET and POST requests
     url = f"{BASE_URL}{endpoint}"
     headers = {
         "Accept": "application/json",
@@ -71,9 +68,7 @@ def make_api_request(method, endpoint, params=None, payload=None):
         return None
 
 def create_project(customer_name):
-    """
-    Creates a new project in CloudShare.
-    """
+    # Creates a new project in CloudShare
     payload = {
         "subscriptionId": "SBPnwD_kw-0hN_O5bhUwKTVQ2",
         "projectName": f"test-NEXTGEN CyberLAB - {customer_name}",
@@ -92,9 +87,7 @@ def create_project(customer_name):
     return None
 
 def get_team_id(project_id):
-    """
-    Retrieves the team ID associated with a project.
-    """
+    # Retrieves the team ID associated with a project
     params = {
         "getRows": "true",
         "projectId": project_id,
@@ -112,9 +105,7 @@ def get_team_id(project_id):
     return None
 
 def invite_user(email, first_name, last_name, project_id, team_id):
-    """
-    Invites a user to the project as a Project Manager.
-    """
+    # Invites a user to the project as a Project Manager
     payload = {
         "email": email,
         "firstName": first_name,
@@ -134,9 +125,7 @@ def invite_user(email, first_name, last_name, project_id, team_id):
         return None
 
 def get_policy_id(project_id):
-    """
-    Retrieves the policy ID associated with a project.
-    """
+    # Retrieves the policy ID associated with a project
     response = make_api_request("GET", f"/projects/{project_id}/policies")
     
     if response and response.status_code == 200:
@@ -148,9 +137,7 @@ def get_policy_id(project_id):
     return None
 
 def create_environment(customer_name, project_id, team_id, policy_id):
-    """
-    Creates a new environment in the project with specified virtual machines.
-    """
+    # Creates a new environment in the project with specified virtual machines
     payload = {
         "environment": {
             "name": f"{customer_name} example environment",
@@ -205,9 +192,7 @@ def create_environment(customer_name, project_id, team_id, policy_id):
         return None
 
 def main():
-    """
-    Main function that orchestrates the entire onboarding process.
-    """
+    # Main function that orchestrates the entire onboarding process
     print("Starting onboarding process...")
     
     # Collect user input
