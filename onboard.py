@@ -6,27 +6,40 @@ import hashlib
 import json
 import urllib.parse
 
-# Define the API endpoint and your API credentials
+# API credentials and base URL
 API_ID = "<your-API-ID-here>"
 API_KEY = "<your-API-Key-here>"
 BASE_URL = "https://use.cloudshare.com/api/v3"
 
 def generate_auth_header(method, url, params=None):
+    """
+    Generates an authentication header for API requests.
+    This uses a custom authentication scheme required by the CloudShare API.
+    """
+    # Generate a timestamp and a random token
     timestamp = str(int(time.time()))
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
     
+    # Construct the full URL including query parameters for GET requests
     if method == 'GET' and params:
         query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
         full_url = f"{url}?{query_string}"
     else:
         full_url = url
     
+    # Create the message to be hashed
     message = f"{API_KEY}{full_url}{timestamp}{token}"
+    # Generate HMAC using SHA1
     hmac = hashlib.sha1(message.encode()).hexdigest()
+    # Construct the final authentication parameter
     auth_param = f"userapiid:{API_ID};timestamp:{timestamp};token:{token};hmac:{hmac}"
     return f"cs_sha1 {auth_param}"
 
 def make_api_request(method, endpoint, params=None, payload=None):
+    """
+    Makes an API request to the CloudShare API.
+    Handles both GET and POST requests.
+    """
     url = f"{BASE_URL}{endpoint}"
     headers = {
         "Accept": "application/json",
@@ -34,6 +47,7 @@ def make_api_request(method, endpoint, params=None, payload=None):
         "Authorization": generate_auth_header(method, url, params)
     }
     
+    # Commented out print statements for debugging
     # print(f"Request URL: {url}")
     # print(f"Request Headers: {headers}")
     # if payload:
@@ -42,11 +56,13 @@ def make_api_request(method, endpoint, params=None, payload=None):
     #     print(f"Request Params: {params}")
     
     try:
+        # Make the API request
         if method == 'GET':
             response = requests.get(url, headers=headers, params=params, verify=True)
         else:
             response = requests.post(url, headers=headers, json=payload, verify=True)
         
+        # Commented out print statements for debugging
         # print(f"Status Code: {response.status_code}")
         # print(f"Response Body: {response.text}")
         return response
@@ -55,6 +71,9 @@ def make_api_request(method, endpoint, params=None, payload=None):
         return None
 
 def create_project(customer_name):
+    """
+    Creates a new project in CloudShare.
+    """
     payload = {
         "subscriptionId": "SBPnwD_kw-0hN_O5bhUwKTVQ2",
         "projectName": f"test-NEXTGEN CyberLAB - {customer_name}",
@@ -73,6 +92,9 @@ def create_project(customer_name):
     return None
 
 def get_team_id(project_id):
+    """
+    Retrieves the team ID associated with a project.
+    """
     params = {
         "getRows": "true",
         "projectId": project_id,
@@ -90,13 +112,16 @@ def get_team_id(project_id):
     return None
 
 def invite_user(email, first_name, last_name, project_id, team_id):
+    """
+    Invites a user to the project as a Project Manager.
+    """
     payload = {
         "email": email,
         "firstName": first_name,
         "lastName": last_name,
         "projectId": project_id,
         "teamId": team_id,
-        "userLevel": 8,  # Project Manager
+        "userLevel": 8,  # 8 corresponds to Project Manager role
         "suppressEmails": False
     }
     
@@ -109,6 +134,9 @@ def invite_user(email, first_name, last_name, project_id, team_id):
         return None
 
 def get_policy_id(project_id):
+    """
+    Retrieves the policy ID associated with a project.
+    """
     response = make_api_request("GET", f"/projects/{project_id}/policies")
     
     if response and response.status_code == 200:
@@ -120,6 +148,9 @@ def get_policy_id(project_id):
     return None
 
 def create_environment(customer_name, project_id, team_id, policy_id):
+    """
+    Creates a new environment in the project with specified virtual machines.
+    """
     payload = {
         "environment": {
             "name": f"{customer_name} example environment",
@@ -174,13 +205,18 @@ def create_environment(customer_name, project_id, team_id, policy_id):
         return None
 
 def main():
+    """
+    Main function that orchestrates the entire onboarding process.
+    """
     print("Starting onboarding process...")
     
+    # Collect user input
     customer_name = input("Enter customer name: ")
     first_name = input("Enter user's first name: ")
     last_name = input("Enter user's last name: ")
     email = input("Enter user's email address: ")
 
+    # Step 1: Create project
     print("\nCreating project...")
     project_data = create_project(customer_name)
     if not project_data or 'id' not in project_data:
@@ -190,6 +226,7 @@ def main():
     project_id = project_data['id']
     print(f"Project created successfully. Project ID: {project_id}")
 
+    # Step 2: Get team ID
     print("\nFetching team ID...")
     team_id = get_team_id(project_id)
     if not team_id:
@@ -198,6 +235,7 @@ def main():
 
     print(f"Team ID fetched successfully. Team ID: {team_id}")
 
+    # Step 3: Get policy ID
     print("\nFetching policy ID...")
     policy_id = get_policy_id(project_id)
     if not policy_id:
@@ -206,19 +244,23 @@ def main():
 
     print(f"Policy ID fetched successfully. Policy ID: {policy_id}")
 
+    # Step 4: Invite user
     print("\nInviting user...")
     invitation_data = invite_user(email, first_name, last_name, project_id, team_id)
     if invitation_data:
         print("User invited successfully as Project Manager.")
+        # Commented out detailed invitation data
         # print(f"Invitation details: {json.dumps(invitation_data, indent=2)}")
     else:
         print("Failed to invite user. Onboarding process incomplete.")
         return
 
+    # Step 5: Create environment
     print("\nCreating environment...")
     environment_data = create_environment(customer_name, project_id, team_id, policy_id)
     if environment_data:
         print("Environment created successfully.")
+        # Commented out detailed environment data
         # print(f"Environment details: {json.dumps(environment_data, indent=2)}")
     else:
         print("Failed to create environment. Onboarding process incomplete.")
