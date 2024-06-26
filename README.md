@@ -62,7 +62,7 @@ Here's a step-by-step breakdown of the script's functionality:
 | user1@example.com    | John       | Doe       | 8          |
 | user2+tag@example.com| Jane       | Smith     | 4          |
 
-   Note: The user_level column is optional. If not provided, users will be added as Project Managers (level 8).
+   Note: The user_level column is optional. The available roles are Team Member (level 2), Team manager (level 4), and Project Manager (level 8) . If not provided, users will be added as Project Managers.
 3. Run the script:
    ```bash
    python CL-Onboard.py
