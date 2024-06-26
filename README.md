@@ -63,7 +63,7 @@ Here's a step-by-step breakdown of the script's functionality:
    Note: The user_level column is optional. If not provided, users will be added as Project Managers (level 8).
 3. Run the script:
    ```bash
-   python onboarding_script.py
+   python CL-Onboard.py
    ```
 4. Follow the prompts to complete the onboarding process.
 
