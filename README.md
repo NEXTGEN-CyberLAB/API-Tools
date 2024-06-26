@@ -1,4 +1,3 @@
-```markdown
 # CloudShare Onboarding Automation Script
 
 This Python script automates the onboarding process for new customers on the CloudShare platform. It streamlines project creation, user invitation, and environment setup, making it easier to get new customers up and running quickly.
@@ -55,14 +54,15 @@ Here's a step-by-step breakdown of the script's functionality:
 
 1. Ensure you have the correct API credentials in the script (`API_ID` and `API_KEY`).
 2. (Optional) Prepare a `users.csv` file in the same directory as the script with the following format:
-   ```
-   email,first_name,last_name,user_level
-   user1@example.com,John,Doe,8
-   user2+tag@example.com,Jane,Smith,4
-   ```
+
+| email                | first_name | last_name | user_level |
+|----------------------|------------|-----------|------------|
+| user1@example.com    | John       | Doe       | 8          |
+| user2+tag@example.com| Jane       | Smith     | 4          |
+
    Note: The user_level column is optional. If not provided, users will be added as Project Managers (level 8).
 3. Run the script:
-   ```
+   ```bash
    python onboarding_script.py
    ```
 4. Follow the prompts to complete the onboarding process.
@@ -85,4 +85,3 @@ Contributions to improve the script are welcome. Please feel free to submit pull
 ## Contact
 
 For any questions or support, please contact hayden.loader@nextgen.group.
-```
