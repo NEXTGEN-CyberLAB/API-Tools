@@ -8,10 +8,11 @@ import urllib.parse
 import csv
 import os
 import re
+import sys
 
 # API credentials and base URL
-API_ID = "<your-API-ID-here>"
-API_KEY = "<your-API-Key-here>"
+API_ID = "<your api id here>"
+API_KEY = "<your api key here>"
 BASE_URL = "https://use.cloudshare.com/api/v3"
 
 error_log = []
@@ -40,6 +41,7 @@ def make_api_request(method, endpoint, params=None, payload=None):
     }
     
     debug_info = {
+        "Request Method": method,
         "Request URL": url,
         "Request Headers": headers,
         "Request Payload": payload,
@@ -53,6 +55,7 @@ def make_api_request(method, endpoint, params=None, payload=None):
             response = requests.post(url, headers=headers, json=payload, verify=True)
         
         debug_info["Status Code"] = response.status_code
+        debug_info["Response Headers"] = dict(response.headers)
         debug_info["Response Body"] = response.text
         
         if response.status_code not in [200, 201, 204]:
@@ -64,10 +67,30 @@ def make_api_request(method, endpoint, params=None, payload=None):
         error_log.append(debug_info)
         return None
 
+def check_api_connection():
+    response = make_api_request("GET", "/ping")
+    if response and response.status_code == 200:
+        data = response.json()
+        if data.get('result') == "Pong":
+            print("API connection successful.")
+            return True
+    print("Error connecting to the API. Please contact hayden.loader@nextgen.group for assistance.")
+    if error_log:
+        print("Error details:")
+        print(json.dumps(error_log, indent=2))
+    return False
+
+def get_user_email():
+    response = make_api_request("GET", "/MasterPage")
+    if response and response.status_code == 200:
+        data = response.json()
+        return data.get('user', {}).get('userEmail')
+    return None
+
 def create_project(customer_name):
     payload = {
         "subscriptionId": "SBPnwD_kw-0hN_O5bhUwKTVQ2",
-        "projectName": f"NEXTGEN CyberLAB - {customer_name}", 
+        "projectName": f"test-NEXTGEN CyberLAB - {customer_name}",
         "teamNames": [customer_name],
         "projectType": 0
     }
@@ -99,34 +122,42 @@ def get_team_id(project_id):
             print("No team found for the project.")
     return None
 
-def invite_user(email, first_name, last_name, project_id, team_id):
-    payload = {
-        "email": email,
-        "firstName": first_name,
-        "lastName": last_name,
-        "projectId": project_id,
-        "teamId": team_id,
-        "userLevel": 8,
-        "suppressEmails": False
-    }
-    
-    response = make_api_request("POST", "/invitations/actions/inviteprojectmember", payload=payload)
-    
-    if response and response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Invitation failed for {email}: {response.json().get('message', 'Unknown error') if response else 'No response'}")
-        return None
-
 def invite_users(project_id, team_id, users):
     results = []
     for user in users:
-        result = invite_user(user['email'], user['first_name'], user['last_name'], project_id, team_id)
-        if result:
-            results.append(result)
+        payload = {
+            "email": user['email'],
+            "firstName": user['first_name'],
+            "lastName": user['last_name'],
+            "projectId": project_id,
+            "teamId": team_id,
+            "userLevel": user['user_level'],
+            "suppressEmails": False
+        }
+    
+        response = make_api_request("POST", "/invitations/actions/inviteprojectmember", payload=payload)
+    
+        if response is None:
+            print(f"No response received from the API for user {user['email']}. This could be due to a network issue or API downtime.")
+            continue
+    
+        if response.status_code == 200:
+            results.append(response.json())
         else:
-            print(f"Failed to invite user: {user['email']}")
-    return results
+            error_info = {
+                "User": user['email'],
+                "Status Code": response.status_code,
+                "Response Content": response.text,
+                "Request Payload": payload
+            }
+            error_log.append({
+                "Error Type": "User Invitation Error",
+                "Error Details": error_info
+            })
+            print(f"Invitation failed for user {user['email']}. Status code: {response.status_code}")
+            print(f"Error message: {response.text}")
+
+    return results if results else None
 
 def get_policy_id(project_id):
     response = make_api_request("GET", f"/projects/{project_id}/policies")
@@ -139,7 +170,7 @@ def get_policy_id(project_id):
             print("No policies found for the project.")
     return None
 
-def create_environment(customer_name, project_id, team_id, policy_id):
+def create_environment(customer_name, project_id, team_id, policy_id, owner_email):
     payload = {
         "environment": {
             "name": f"{customer_name} example environment",
@@ -149,7 +180,7 @@ def create_environment(customer_name, project_id, team_id, policy_id):
             "regionId": "RE0YOUV7_lTmgb0X8D1UjM3g2",
             "description": "Example environment created for you by the CyberLAB team!",
             "externalCloudData": [],
-            "OwnerEmail": "hayden.loader@nextgen.group"
+            "OwnerEmail": owner_email
         },
         "preview": False,
         "itemsCart": [
@@ -194,7 +225,6 @@ def create_environment(customer_name, project_id, team_id, policy_id):
         return None
 
 def is_valid_email(email):
-    # Updated regex pattern to allow '+' in the local part of the email
     pattern = r'^[\w\.-]+(\+[\w\.-]+)?@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
 
@@ -208,20 +238,38 @@ def load_users_from_csv():
         with open(file_path, 'r', encoding='utf-8-sig') as csvfile:
             reader = csv.reader(csvfile)
             users = []
+            default_user_level_count = 0
             for row in reader:
-                if len(row) != 3 or not is_valid_email(row[0]):
+                if len(row) < 3 or not is_valid_email(row[0]):
                     print(f"Skipping invalid row: {row}")
                     continue
+                user_level = int(row[3]) if len(row) > 3 and row[3] in ['2', '4', '8'] else 8
+                if user_level == 8 and len(row) <= 3:
+                    default_user_level_count += 1
                 users.append({
                     'email': row[0],
                     'first_name': row[1],
-                    'last_name': row[2]
+                    'last_name': row[2],
+                    'user_level': user_level
                 })
         print(f"Successfully loaded {len(users)} users from the CSV file.")
+        if default_user_level_count > 0:
+            print(f"{default_user_level_count} users seen in the CSV do not have a user level defined and will be added as Project Managers.")
         return users
     except Exception as e:
         print(f"Error reading CSV file: {e}")
         return None
+
+def get_user_level():
+    while True:
+        print("\nUser Levels:")
+        print("2 - Team Member")
+        print("4 - Team Manager")
+        print("8 - Project Manager")
+        level = input("Enter the user level (2, 4, or 8): ")
+        if level in ['2', '4', '8']:
+            return int(level)
+        print("Invalid input. Please enter 2, 4, or 8.")
 
 def get_users_input():
     users = []
@@ -232,10 +280,12 @@ def get_users_input():
             continue
         first_name = input("Enter user's first name: ")
         last_name = input("Enter user's last name: ")
+        user_level = get_user_level()
         users.append({
             'email': email,
             'first_name': first_name,
-            'last_name': last_name
+            'last_name': last_name,
+            'user_level': user_level
         })
         if input("Would you like to add another user? (y/n): ").lower() != 'y':
             break
@@ -244,6 +294,14 @@ def get_users_input():
 
 def main():
     print("Starting the onboarding process...")
+
+    if not check_api_connection():
+        sys.exit(1)
+
+    user_email = get_user_email()
+    if not user_email:
+        print("Failed to retrieve user email. Please contact hayden.loader@nextgen.group for assistance.")
+        sys.exit(1)
     
     customer_name = input("Enter the customer name: ")
 
@@ -289,13 +347,14 @@ def main():
     print("\nInviting users...")
     invitation_data = invite_users(project_id, team_id, users)
     if invitation_data:
-        print(f"Successfully invited {len(invitation_data)} out of {len(users)} users as Project Managers.")
+        print(f"Successfully invited {len(invitation_data)} out of {len(users)} users.")
     else:
-        print("Failed to invite any users. The onboarding process is incomplete.")
+        print("Failed to invite users. The onboarding process is incomplete.")
+        print("Please check the error log for more details.")
         return
 
     print("\nCreating the environment...")
-    environment_data = create_environment(customer_name, project_id, team_id, policy_id)
+    environment_data = create_environment(customer_name, project_id, team_id, policy_id, user_email)
     if environment_data:
         print("Environment created successfully.")
     else:
@@ -304,9 +363,18 @@ def main():
     if error_log:
         print("\nERROR LOG:")
         print("Errors occurred during the onboarding process. Please send the following error log to hayden.loader@nextgen.group:")
-        print(json.dumps(error_log, indent=2))
+        for i, error in enumerate(error_log, 1):
+            print(f"\nError {i}:")
+            print(json.dumps(error, indent=2))
     else:
         print("\nThe onboarding process has completed successfully!")
+
+    # Always display errors, even if the process was aborted
+    if error_log:
+        print("\nDetailed Error Log:")
+        for i, error in enumerate(error_log, 1):
+            print(f"\nError {i}:")
+            print(json.dumps(error, indent=2))
 
 if __name__ == "__main__":
     main()
