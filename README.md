@@ -15,11 +15,11 @@ Here's a step-by-step breakdown of the script's functionality:
    - This email is later used as the owner email for the created environment.
 
 3. **Customer Information Input**:
-   - You'll be prompted to enter the customer's name.
+   - You'll be prompted to enter the customer's name. What you type here will be used to make the Project name (NEXTGEN CyberLAB - {project name})
 
 4. **User Loading**:
    - The script checks for a `users.csv` file in the same directory.
-   - If found, you can choose to use these pre-defined users or input them manually.
+   - If found, you can choose to use these pre-defined users or input users manually. If not found you will be prompted for manual input
    - For manual input, you'll be asked for each user's email, first name, last name, and user level.
 
 5. **Project Creation**:
