@@ -2,6 +2,8 @@
 
 This Python script automates the onboarding process for new customers on the CloudShare platform. It streamlines project creation, user invitation, and environment setup, making it easier to get new customers up and running quickly.
 
+![demo of how to use the python script](CL-Onboard-demo.gif)
+
 ## What This Script Does
 
 Here's a step-by-step breakdown of the script's functionality:
