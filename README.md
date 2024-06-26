@@ -55,7 +55,7 @@ Here's a step-by-step breakdown of the script's functionality:
 ## Usage
 
 1. Ensure you have the correct API credentials in the script (`API_ID` and `API_KEY`).
-2. (Optional) Prepare a `users.csv` file in the same directory as the script with the following format:
+2. (Optional) Prepare a `users.csv` file in the same directory as the script with the following format WITHOUT THE COLUMN HEADINGS:
 
 | email                | first_name | last_name | user_level |
 |----------------------|------------|-----------|------------|
