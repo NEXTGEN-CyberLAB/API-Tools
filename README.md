@@ -51,17 +51,6 @@ Here's a step-by-step breakdown of the script's functionality:
 - Python 3.6+
 - `requests` library
 
-## Setup
-
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/cloudshare-onboarding-automation.git
-   ```
-2. Install the required Python packages:
-   ```
-   pip install requests
-   ```
-
 ## Usage
 
 1. Ensure you have the correct API credentials in the script (`API_ID` and `API_KEY`).
